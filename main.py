@@ -6,7 +6,12 @@ from pybricks.parameters import Port, Stop, Direction, Button, Color
 from pybricks.tools import wait, StopWatch, DataLog
 from pybricks.robotics import DriveBase
 from pybricks.media.ev3dev import SoundFile, ImageFile, Font
+import sys
 
+if sys.implementation.name == 'cpython':
+    import asyncio as uasyncio
+else:
+    import uasyncio
 # This program requires LEGO EV3 MicroPython v2.0 or higher.
 # Click "Open user guide" on the EV3 extension tab for more information.
 
@@ -25,9 +30,9 @@ RELEASE_PORT = Port.C
 LEFT_WHEEL_PORT = Port.A
 RIGHT_WHEEL_PORT = Port.D
 
-LEFT_SENSOR_PORT = Port.S2
+LEFT_SENSOR_PORT = Port.S3
 RIGHT_SENSOR_PORT = Port.S1
-MIDDLE_SENSOR_PORT = Port.S3
+# MIDDLE_SENSOR_PORT = Port.S3
 GYRO_SENSOR_PORT = Port.S4
 
 
@@ -143,65 +148,64 @@ class Player:
         self.catapult.startup()
         self.display.startup()
 
-    def init_routine(self):
+    async def init_routine(self):
         while self.left_color_sensor.color() != Color.GREEN:
-            yield
+            await uasyncio.sleep(0)
 
-    def start_routine(self):
+    async def start_routine(self):
         while self.left_color_sensor.color() == Color.GREEN:
             self.drive_speed = 100
             self.turn_rate = 0
-            yield
+            await uasyncio.sleep(0)
 
     def update_speed_turn_rate(self, backwards=False):
         deviation = self.right_color_sensor.reflection() - BW_THRESHOLD
         k = -1 if backwards else 1
         self.turn_rate = PROPORTIONAL_GAIN * deviation * k
 
-    def walk_along_line_forward(self):
+    async def walk_along_line_forward(self):
         while self.left_color_sensor.color() == Color.WHITE:
             self.update_speed_turn_rate()
+            await uasyncio.sleep(0)
 
-    def throw_routine(self):
+    async def throw_routine(self):
         self.drive_speed = 0
         self.turn_rate = 0
-        yield
+        await uasyncio.sleep(0.2)
         self.catapult.set_tension(70)
         self.catapult.shoot()
-        yield
 
-    def walk_along_line_backwards(self):
+    async def walk_along_line_backwards(self):
         while self.left_color_sensor.color() == Color.WHITE:
             self.update_speed_turn_rate(backwards=True)
         self.drive_speed = 0
         self.turn_rate = 0
 
-    def manage_drive(self):
+    async def manage_drive(self):
         while True:
             if self.drive_speed == 0:
                 self.drivebase.stop()
             else:
                 self.drivebase.drive(self.drive_speed, self.turn_rate)
-            yield None
+            await uasyncio.sleep(0.01)
 
-    def run(self):
-        yield from self.init_routine()
-        yield from self.start_routine()
-        yield from self.walk_along_line_forward()
-        yield from self.throw_routine()
-        yield from self.walk_along_line_backwards()
+    async def run(self):
+        await self.init_routine()
+        await self.start_routine()
+        await self.walk_along_line_forward()
+        await self.throw_routine()
+        await self.walk_along_line_backwards()
 
 
 
     def log(self):
         self.datalog.log((
             self.mode,
-            self.left_color_sensor.reflection(),
-            self.middle_color_sensor.color(),
+            self.left_color_sensor.color(),
             self.right_color_sensor.reflection(),
             self.gyro_sensor.angle()
         ))
-        yield
+        await uasyncio.sleep(0.1)
 
 
 player = Player()
@@ -213,7 +217,7 @@ tasks = [
 ]
 
 
-while True:
-    wait(10)
-    for t in tasks:
-        next(t)
+loop = uasyncio.get_event_loop()
+loop.create_task(player.manage_drive())
+loop.create_task(player.log())
+loop.run_until_complete(player.run())
