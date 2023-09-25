@@ -203,6 +203,8 @@ class Player:
     MODE_RETURN = 3
     MODE_FINISH = 4
 
+    BACKWARDS_FACTOR = 0.7
+
     def __init__(self):
         self.catapult = Catapult(TENSION_PORT, RELEASE_PORT)
         self.drivebase = DriveBase(
@@ -244,7 +246,7 @@ class Player:
 
     def backwards(self):
         self.drivebase.reset()
-        self.drive_speed = -MAX_SPEED
+        self.drive_speed = -MAX_SPEED * BACKWARDS_FACTOR
         self.turn_rate = 0
         self.move_start = time.time()
 
