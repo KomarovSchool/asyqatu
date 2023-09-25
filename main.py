@@ -12,9 +12,11 @@ import time
 if sys.implementation.name == 'cpython':
     import asyncio as uasyncio
     from collections import namedtuple
+    import json
 else:
     import uasyncio
     from ucollections import namedtuple
+    import ujson as json
 # This program requires LEGO EV3 MicroPython v2.0 or higher.
 # Click "Open user guide" on the EV3 extension tab for more information.
 
@@ -27,13 +29,13 @@ ev3.speaker.beep()
 
 CATAPULT_DEFAULT_POWER = 70
 TENSION_PORT = Port.B
-RELEASE_PORT = Port.C
+RELEASE_PORT = Port.D
 
-LEFT_WHEEL_PORT = Port.A
-RIGHT_WHEEL_PORT = Port.D
+LEFT_WHEEL_PORT = Port.C
+RIGHT_WHEEL_PORT = Port.B
 
-LEFT_SENSOR_PORT = Port.S3
-RIGHT_SENSOR_PORT = Port.S1
+LEFT_SENSOR_PORT = Port.S1
+RIGHT_SENSOR_PORT = Port.S4
 # MIDDLE_SENSOR_PORT = Port.S3
 GYRO_SENSOR_PORT = Port.S4
 
@@ -48,13 +50,9 @@ BW_THRESHOLD = (BLACK + WHITE) / 2
 
 
 class Catapult:
-    min_tension = 40
-    max_tension = 100
 
     def __init__(self, tension_port, release_port):
-        self.tension_motor = Motor(tension_port)
         self.release_motor = Motor(release_port)
-        self.tension = CATAPULT_DEFAULT_POWER
 
     def startup(self):
         self.lock()
@@ -65,21 +63,34 @@ class Catapult:
     def release(self):
         self.release_motor.run_until_stalled(500, duty_limit=40)
 
-    def set_tension(self, value):
-        if self.min_tension <= value <= self.max_tension:
-            self.tension = value
+    # def set_tension(self, value):
+    #     if self.min_tension <= value <= self.max_tension:
+    #         self.tension = value
 
     def shoot(self):
-        start_angle = self.tension_motor.angle()
-        self.tension_motor.run_until_stalled(100, duty_limit=self.tension, then=Stop.HOLD)
+        # start_angle = self.tension_motor.angle()
+        # self.tension_motor.run_until_stalled(100, duty_limit=self.tension, then=Stop.HOLD)
         self.release()
-        self.tension_motor.run_target(300, start_angle)
+        # self.tension_motor.run_target(300, start_angle)
         self.lock()
 
-
+TENSION = 76
 DI_BLACK_LEVEL = 0
 DI_WHITE_LEVEL = 1
 DI_THRESHOLD = 2
+
+MAX_SPEED = 100
+
+ANGLES = {
+    1: -10,
+    2: -3,
+    3: 0,
+    4: 3
+}
+
+
+# TOTAL_DISTANCE = 1150
+TOTAL_DISTANCE = 750
 
 Setting = namedtuple("Setting", ("name", "min", "max"))
 
@@ -102,19 +113,54 @@ class MeasurementScreen:
             wait(150)
 
 
-class SettingsPage:
-    def __init__(self, screen):
+class MainMenu:
+    def __init__(self, screen, player):
         self.screen = screen
+        self.player = player
         self.current_item = 0
-        self.black_level = BLACK
-        self.white_level = WHITE
-        self.threshold = BW_THRESHOLD
+        self.items = ["start", "settings"]
+        self.update()
+
+    def update(self):
+        self.screen.clear()
+        for i, item in enumerate(self.items):
+            if self.current_item == i:
+                self.screen.draw_text(5, 20 + 20 * i, ">")
+            self.screen.draw_text(20, 20 + 20 * i, item.upper())
+
+
+    def process_input(self):
+        while True:
+            if Button.UP in ev3.buttons.pressed():
+                self.current_item = (self.current_item - 1) % len(self.items)
+            elif Button.DOWN in ev3.buttons.pressed():
+                self.current_item = (self.current_item + 1) % len(self.items)
+            elif Button.LEFT in ev3.buttons.pressed():
+                setting, value = self.settings[self.current_item]
+                self.settings[self.current_item][1] = min(max(setting.min, value - 1), setting.max)
+            elif Button.RIGHT in ev3.buttons.pressed():
+                setting, value = self.settings[self.current_item]
+                self.settings[self.current_item][1] = min(max(setting.min, value + 1), setting.max)
+            elif Button.CENTER in ev3.buttons.pressed():
+                if self.current_item == 0:
+                    break
+                elif self.current_item == 1:
+                    while Button.CENTER in ev3.buttons.pressed():
+                        wait(20)
+                    setting_page = SettingsPage(self.screen, self.player)
+                    setting_page.process_input()
+            wait(150)
+            self.update()
+
+
+class SettingsPage:
+    def __init__(self, screen, player):
+        self.screen = screen
+        self.player = player
+        self.current_item = 0
         self.settings = [
-            [Setting("Black", 0, 100), BLACK,],
-            [Setting("White", 0, 100), WHITE,],
-            [Setting("Threshold", 0, 100), BW_THRESHOLD,],
-            [Setting("Tension", 40, 100), CATAPULT_DEFAULT_POWER],
-            [Setting("Asyq", 1, 5), 3],
+            [Setting("Tension", 40, 100), self.player.tension],
+            [Setting("Asyq", 1, 4), self.player.asyq],
         ]
         self.update()
 
@@ -138,40 +184,13 @@ class SettingsPage:
                 setting, value = self.settings[self.current_item]
                 self.settings[self.current_item][1] = min(max(setting.min, value + 1), setting.max)
             elif Button.CENTER in ev3.buttons.pressed():
+                self.player.asyq = self.settings[1][1]
+                self.player.tension = self.settings[0][1]
                 break
             else:
                 continue
             self.update()
-            wait(150)
-
-
-class Display:
-    delta = 1
-
-    def __init__(self, catapult):
-        self.catapult = catapult
-        self.ev3 = EV3Brick()
-        self.settings_page = SettingsPage(self.ev3.screen)
-        self.measurement_page = MeasurementScreen(self.ev3.screen, ColorSensor(RIGHT_SENSOR_PORT))
-
-    def startup(self):
-        self.ev3.screen.set_font(Font("Lucida", 18))
-        #self.measurement_page.process_input()
-        #self.settings_page.process_input()
-
-    def increase(self):
-        self.catapult.set_tension(self.catapult.tension + self.delta)
-
-    def decrease(self):
-        self.catapult.set_tension(self.catapult.tension - self.delta)
-
-    def loop(self):
-        if Button.UP in self.ev3.buttons.pressed():
-            self.increase()
-        elif Button.DOWN in self.ev3.buttons.pressed():
-            self.decrease()
-        elif Button.CENTER in self.ev3.buttons.pressed():
-            self.catapult.shoot()
+            wait(300)
 
 
 class Player:
@@ -183,7 +202,6 @@ class Player:
 
     def __init__(self):
         self.catapult = Catapult(TENSION_PORT, RELEASE_PORT)
-        self.display = Display(self.catapult)
         self.drivebase = DriveBase(
             Motor(LEFT_WHEEL_PORT),
             Motor(RIGHT_WHEEL_PORT),
@@ -192,19 +210,18 @@ class Player:
         )
         self.left_color_sensor = ColorSensor(LEFT_SENSOR_PORT)
         self.right_color_sensor = ColorSensor(RIGHT_SENSOR_PORT)
-        self.gyro_sensor = GyroSensor(GYRO_SENSOR_PORT)
+        #self.gyro_sensor = GyroSensor(GYRO_SENSOR_PORT)
         self.mode = self.MODE_START
         self.drive_speed = 0
         self.turn_rate = 0
         self.drive_speed_factor = 1
-        self.walk_along_line_start = time.time()
 
-        self.datalog = DataLog(
-            "left_color",
-            "right_reflection",
-            "gyro_angle",
-            "turn_rate"
-        )
+        self.tension = 60
+        self.asyq = 3
+
+        self.move_start = time.time()
+
+
 
     def startup(self):
         self.catapult.startup()
@@ -216,26 +233,55 @@ class Player:
             await uasyncio.sleep(0)
         print("Init end")
 
+    def forward(self):
+        self.drivebase.reset()
+        self.drive_speed = MAX_SPEED
+        self.turn_rate = 0
+        self.move_start = time.time()
+        self.update_speed_factor()
+
+    def backwards(self):
+        self.drivebase.reset()
+        self.drive_speed = -MAX_SPEED
+        self.turn_rate = 0
+        self.move_start = time.time()
+        self.update_speed_factor()
+
+    def stop(self):
+        self.drive_speed = 0
+        self.turn_rate = 0
+
     async def start_routine(self):
         print("Start start")
         while self.left_color_sensor.color() == Color.GREEN:
-            self.drive_speed = 100
-            self.turn_rate = 0
+            self.forward()
             await uasyncio.sleep(0)
         print("Start end")
 
+    def update_speed_factor(self):
+        self.drive_speed_factor = 1
+        return
+        # move_duration = time.time() - self.move_start
+        # distance = self.drivebase.distance()
+        # if move_duration < 3:
+        #     self.drive_speed_factor = max(move_duration / 3, 0.1)
+        # elif abs(distance) > 800:
+        #     distance_remaining = TOTAL_DISTANCE - abs(distance)
+        #     distance_after_1000 = TOTAL_DISTANCE - 1000
+        #     factor = distance_remaining / distance_after_1000
+        #     self.drive_speed_factor = max(factor, 0.1)
+        # else:
+        #     self.drive_speed_factor = 1
+    
     def update_speed_turn_rate(self, backwards=False):
-        if time.time() - self.walk_along_line_start > 10:
-            self.drive_speed_factor = 0.5
-        else:
-            self.drive_speed_factor = 1
+        self.update_speed_factor()
         deviation = self.right_color_sensor.reflection() - BW_THRESHOLD
         k = -0.25 if backwards else 1
         self.turn_rate = PROPORTIONAL_GAIN * deviation * k
 
     async def walk_along_line_forward(self):
         print("WALF start")
-        self.walk_along_line_start = time.time()
+        self.move_start = time.time()
         while self.left_color_sensor.color() != Color.RED:
             self.update_speed_turn_rate()
             await uasyncio.sleep(0.1)
@@ -243,18 +289,18 @@ class Player:
 
     async def throw_routine(self):
         print("Throw start")
-        self.drive_speed = 0
-        self.turn_rate = 0
+        self.stop()
         await uasyncio.sleep(0.2)
-        self.catapult.set_tension(70)
+        self.drivebase.turn(ANGLES[self.asyq])
+        #self.catapult.set_tension(self.tension)
         self.catapult.shoot()
+        self.drivebase.turn(-ANGLES[self.asyq])
         print("Throw end")
 
     async def walk_along_line_backwards(self):
         print("WALB start")
-        self.drive_speed = -100
-        self.turn_rate = 0
-        self.walk_along_line_start = time.time()
+        self.backwards()
+        self.move_start = time.time()
         await uasyncio.sleep(0.1)
         print("WALB while color")
         while self.left_color_sensor.color() != Color.GREEN:
@@ -280,8 +326,14 @@ class Player:
         await self.walk_along_line_backwards()
 
     def log(self):
+        datalog = DataLog(
+            "left_color",
+            "right_reflection",
+            "gyro_angle",
+            "turn_rate"
+        )
         while True:
-            self.datalog.log((
+            datalog.log((
                 self.left_color_sensor.color(),
                 self.right_color_sensor.reflection(),
                 self.gyro_sensor.angle(),
@@ -289,15 +341,11 @@ class Player:
             ))
             await uasyncio.sleep(0.1)
 
-while Button.CENTER not in ev3.buttons.pressed():
-    wait(50)
+
 player = Player()
 player.startup()
-tasks = [
-    player.manage_drive(),
-    player.log(),
-    player.run()
-]
+main_menu = MainMenu(ev3.screen, player)
+main_menu.process_input()
 
 loop = uasyncio.get_event_loop()
 loop.create_task(player.manage_drive())
