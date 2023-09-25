@@ -266,7 +266,7 @@ class Player:
         self.move_start = time.time()
         while self.left_color_sensor.color() != Color.RED:
             self.update_speed_turn_rate()
-            await uasyncio.sleep(0.1)
+            await uasyncio.sleep(0.02)
         print("WALF end")
 
     async def throw_routine(self):
