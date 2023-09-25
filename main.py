@@ -44,24 +44,27 @@ AXLE_TRACK = 145
 WHEEL_DIAMETER = 56
 
 PROPORTIONAL_GAIN = 0.5
-BLACK = 4
-WHITE = 38
+# BLACK = 4
+# WHITE = 38
+
+BLACK = 10
+WHITE = 90
 BW_THRESHOLD = (BLACK + WHITE) / 2
 
 
 class Catapult:
 
     def __init__(self, tension_port, release_port):
-        self.release_motor = Motor(release_port)
+        self.release_motor = Motor(release_port, positive_direction=Direction.COUNTERCLOCKWISE)
 
     def startup(self):
         self.lock()
 
     def lock(self):
-        self.release_motor.run_until_stalled(-500, duty_limit=40)
+        self.release_motor.run_until_stalled(-500, then=Stop.HOLD)
 
     def release(self):
-        self.release_motor.run_until_stalled(500, duty_limit=40)
+        self.release_motor.run_until_stalled(500)
 
     # def set_tension(self, value):
     #     if self.min_tension <= value <= self.max_tension:
@@ -258,7 +261,7 @@ class Player:
     
     def update_speed_turn_rate(self, backwards=False):
         deviation = self.right_color_sensor.reflection() - BW_THRESHOLD
-        k = -1 if backwards else 1
+        k = -0.2 if backwards else 1
         self.turn_rate = PROPORTIONAL_GAIN * deviation * k
 
     async def walk_along_line_forward(self):
@@ -318,7 +321,7 @@ class Player:
             datalog.log((
                 self.left_color_sensor.color(),
                 self.right_color_sensor.reflection(),
-                self.gyro_sensor.angle(),
+                #self.gyro_sensor.angle(),
                 self.turn_rate
             ))
             await uasyncio.sleep(0.1)
@@ -331,5 +334,5 @@ main_menu.process_input()
 
 loop = uasyncio.get_event_loop()
 loop.create_task(player.manage_drive())
-#loop.create_task(player.log())
+loop.create_task(player.log())
 loop.run_until_complete(player.run())
