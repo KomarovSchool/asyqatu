@@ -258,7 +258,7 @@ class Player:
     
     def update_speed_turn_rate(self, backwards=False):
         deviation = self.right_color_sensor.reflection() - BW_THRESHOLD
-        k = -0.25 if backwards else 1
+        k = -1 if backwards else 1
         self.turn_rate = PROPORTIONAL_GAIN * deviation * k
 
     async def walk_along_line_forward(self):
