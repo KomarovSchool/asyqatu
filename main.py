@@ -238,14 +238,12 @@ class Player:
         self.drive_speed = MAX_SPEED
         self.turn_rate = 0
         self.move_start = time.time()
-        self.update_speed_factor()
 
     def backwards(self):
         self.drivebase.reset()
         self.drive_speed = -MAX_SPEED
         self.turn_rate = 0
         self.move_start = time.time()
-        self.update_speed_factor()
 
     def stop(self):
         self.drive_speed = 0
@@ -257,24 +255,8 @@ class Player:
             self.forward()
             await uasyncio.sleep(0)
         print("Start end")
-
-    def update_speed_factor(self):
-        self.drive_speed_factor = 1
-        return
-        # move_duration = time.time() - self.move_start
-        # distance = self.drivebase.distance()
-        # if move_duration < 3:
-        #     self.drive_speed_factor = max(move_duration / 3, 0.1)
-        # elif abs(distance) > 800:
-        #     distance_remaining = TOTAL_DISTANCE - abs(distance)
-        #     distance_after_1000 = TOTAL_DISTANCE - 1000
-        #     factor = distance_remaining / distance_after_1000
-        #     self.drive_speed_factor = max(factor, 0.1)
-        # else:
-        #     self.drive_speed_factor = 1
     
     def update_speed_turn_rate(self, backwards=False):
-        self.update_speed_factor()
         deviation = self.right_color_sensor.reflection() - BW_THRESHOLD
         k = -0.25 if backwards else 1
         self.turn_rate = PROPORTIONAL_GAIN * deviation * k
@@ -305,7 +287,7 @@ class Player:
         print("WALB while color")
         while self.left_color_sensor.color() != Color.GREEN:
             self.update_speed_turn_rate(backwards=True)
-            await uasyncio.sleep(0.1)
+            await uasyncio.sleep(0.02)
         self.drive_speed = 0
         self.turn_rate = 0
         print("WALB end")
