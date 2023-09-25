@@ -310,7 +310,7 @@ class Player:
         await self.throw_routine()
         await self.walk_along_line_backwards()
 
-    def log(self):
+    async def log(self):
         datalog = DataLog(
             "left_color",
             "right_reflection",
