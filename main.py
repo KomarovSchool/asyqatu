@@ -334,5 +334,5 @@ main_menu.process_input()
 
 loop = uasyncio.get_event_loop()
 loop.create_task(player.manage_drive())
-loop.create_task(player.log())
+# loop.create_task(player.log())
 loop.run_until_complete(player.run())
